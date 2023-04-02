@@ -38,7 +38,7 @@ class TeamTracking():
         df_tracking_home = df_tracking_home.drop([team + 'Players'], axis = 1)
         return df_tracking_home
     
-    def calculate_acceleration(self,smoothing=False, window=7, polyorder=1):
+    def calculate_acceleration(self,smoothing=False, window=7, polyorder=1, maxacceleration = 12):
         """
         Calcule pour chaque individu la valeur de vitesse et d'accélération à chaque instant du match.
         Inspiré de : https://github.com/Friends-of-Tracking-Data-FoTD/LaurieOnTracking/blob/master/Metrica_Velocities.py
@@ -47,8 +47,8 @@ class TeamTracking():
         if (self.df_tracking.groupby(['optaId', 'period']).gameClock.diff() >= self.frequence  + .0001).any() :
             raise ValueError(f"L'échantillonage n'est pas toujours égale à {int(1/f)} Hz.")
         
-        # Smoothing
-        if smoothing :
+        # Recalcule de la vitesse
+        if False :
             # Vecteur vitesse
             self.df_tracking.loc[:, 'vx'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
             self.df_tracking.loc[:, 'vy'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
@@ -62,9 +62,13 @@ class TeamTracking():
             self.df_tracking.drop(['vx', 'vy'], axis = 1)
         
         self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).speed.diff() / self.frequence
+        self.df_tracking.loc[self.df_tracking.acceleration > maxacceleration, 'acceleration'] = np.nan 
+        # Smoothing
+        if smoothing :
+            self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).acceleration.transform(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
         return self.df_tracking
     
-    def calculate_metabolic_cost(self):
+    def calculate_metabolic_cost(self, smoothing=False, window=7, polyorder=1):
         """
         Calcule pour chaque individu le coût métabolic de la vitesse et accélération à chaque instant du match.
         Inspiré de : https://soccermatics.readthedocs.io/en/latest/gallery/lesson8/plot_AccDecRatio.html
@@ -82,6 +86,12 @@ class TeamTracking():
         mask_negative_acc = self.df_tracking.acceleration < 0
         self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] = self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] * (-0.85 * self.df_tracking.loc[mask_negative_acc, 'acceleration'] + 3.6 * np.exp(1.33 * self.df_tracking.loc[mask_negative_acc, 'acceleration']))
         
+        # Smoothing
+        if smoothing :
+            self.df_tracking.loc[:, 'metabolic_cost'] = self.df_tracking.groupby(['optaId', 'period']).metabolic_cost.transform(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
+        
+        # Calcul de la puissance métabolique
+        self.df_tracking.loc[:, 'metabolic_power'] = self.df_tracking.metabolic_cost * self.df_tracking.speed
         return self.df_tracking
     
 class MatchTracking():
