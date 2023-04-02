@@ -1,4 +1,6 @@
 import pandas as pd
+import scipy.signal as signal
+import numpy as np
 import sys
 import os
 
@@ -6,6 +8,7 @@ class TeamTracking():
     def __init__(self, tracking_file_path = None, df_unstructured_tracking = pd.DataFrame(), isHomeTeam = True):
         """Objet représentant les données de tracking de SecondSpectrum pour une équipe donnée."""
         self.isHomeTeam = isHomeTeam
+        self.frequence = 0.04
 
         if tracking_file_path : 
             df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
@@ -25,27 +28,70 @@ class TeamTracking():
         df_tracking_home = df_tracking_home.explode(team + 'Players')
 
         # Récupère les informations nécessaires dans les dictionnaires
-        df_tracking_home.loc[:, 'optaId'] = df_tracking_home[team + 'Players'].apply(lambda x: x['optaId'])
+        df_tracking_home.loc[:, 'optaId'] = df_tracking_home[team + 'Players'].apply(lambda x: x['optaId']).astype(int)
         df_tracking_home.loc[:, 'speed'] = df_tracking_home[team + 'Players'].apply(lambda x: x['speed'])
-        df_tracking_home.loc[:, 'xyz'] = df_tracking_home[team + 'Players'].apply(lambda x: x['xyz'])
+        df_tracking_home.loc[:, 'x'] = df_tracking_home[team + 'Players'].apply(lambda x: x['xyz'][0])
+        df_tracking_home.loc[:, 'y'] = df_tracking_home[team + 'Players'].apply(lambda x: x['xyz'][1])
+        #df_tracking_home.loc[:, 'z'] = df_tracking_home[team + 'Players'].apply(lambda x: x['xyz'][2]) # z semble tout le temps nulle
 
         # Drop les colonnes inutiles
         df_tracking_home = df_tracking_home.drop([team + 'Players'], axis = 1)
         return df_tracking_home
     
-    def calculate_velocities(self):
-        #TODO
-        return None
-    
-    def calculate_accelerations(self):
-        #TODO
-        return None
+    def calculate_acceleration(self,smoothing=False, window=7, polyorder=1):
+        """
+        Calcule pour chaque individu la valeur de vitesse et d'accélération à chaque instant du match.
+        Inspiré de : https://github.com/Friends-of-Tracking-Data-FoTD/LaurieOnTracking/blob/master/Metrica_Velocities.py
+        """
+        # Vérification que l'échantillonage est constant
+        if (self.df_tracking.groupby(['optaId', 'period']).gameClock.diff() >= self.frequence  + .0001).any() :
+            raise ValueError(f"L'échantillonage n'est pas toujours égale à {int(1/f)} Hz.")
+        
+        # Smoothing
+        if smoothing :
+            # Vecteur vitesse
+            self.df_tracking.loc[:, 'vx'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
+            self.df_tracking.loc[:, 'vy'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
 
+            # Vitesse scalaire
+            self.df_tracking.loc[:, 'vx'] = self.df_tracking.groupby(['optaId', 'period']).vx.apply(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
+            self.df_tracking.loc[:, 'vy'] = self.df_tracking.groupby(['optaId', 'period']).vy.apply(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
+            
+            # Scalaire de la vitesse 
+            self.df_tracking.loc[:, 'speed'] = np.sqrt(self.df_tracking.vx ** 2 + self.df_tracking.vy ** 2)
+            self.df_tracking.drop(['vx', 'vy'], axis = 1)
+        
+        self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).speed.diff() / self.frequence
+        return self.df_tracking
+    
+    def calculate_metabolic_cost(self):
+        """
+        Calcule pour chaque individu le coût métabolic de la vitesse et accélération à chaque instant du match.
+        Inspiré de : https://soccermatics.readthedocs.io/en/latest/gallery/lesson8/plot_AccDecRatio.html
+        """
+        if not 'acceleration' in self.df_tracking.columns :
+            raise ValueError("Un calcul d'accélération doit être réalisé en amont de l'appel de cette méthode")
+        
+        self.df_tracking.loc[:, 'metabolic_cost'] = 0.102 * np.sqrt(self.df_tracking.acceleration ** 2 + 96.2)
+
+        # Calcul pour les accélérations positives
+        mask_positive_acc = self.df_tracking.acceleration >= 0
+        self.df_tracking.loc[mask_positive_acc, 'metabolic_cost'] = self.df_tracking.loc[mask_positive_acc, 'metabolic_cost'] * (4.03 * self.df_tracking.loc[mask_positive_acc, 'acceleration'] + 3.6 * np.exp(-0.408 * self.df_tracking.loc[mask_positive_acc, 'acceleration']))
+        
+        # Calcul pour les accélérations négatives
+        mask_negative_acc = self.df_tracking.acceleration < 0
+        self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] = self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] * (-0.85 * self.df_tracking.loc[mask_negative_acc, 'acceleration'] + 3.6 * np.exp(1.33 * self.df_tracking.loc[mask_negative_acc, 'acceleration']))
+        
+        return self.df_tracking
     
 class MatchTracking():
     def __init__(self, match_id = None):
         """"Objet représentant les données de tracking de SecondSpectrum pour un match donné."""
         #TODO
+        self.HomeTracking = TeamTracking()
+        self.AwayTracking = TeamTracking()
+        self.BallTracking = None
+
 
 
 
