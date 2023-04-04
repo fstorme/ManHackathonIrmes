@@ -5,10 +5,13 @@ import sys
 import os
 
 class TeamTracking():
-    def __init__(self, tracking_file_path = None, df_unstructured_tracking = pd.DataFrame(), isHomeTeam = True):
+    def __init__(self, tracking_file_path = None, 
+                 df_unstructured_tracking = pd.DataFrame(), 
+                 isHomeTeam = True, 
+                 frequency=0.04):
         """Objet représentant les données de tracking de SecondSpectrum pour une équipe donnée."""
         self.isHomeTeam = isHomeTeam
-        self.frequence = 0.04
+        self.frequence = frequency
 
         if tracking_file_path : 
             df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
@@ -38,7 +41,7 @@ class TeamTracking():
         df_tracking_home = df_tracking_home.drop([team + 'Players'], axis = 1)
         return df_tracking_home
     
-    def calculate_acceleration(self,smoothing=False, window=7, polyorder=1):
+    def calculate_acceleration(self,smoothing=False, window=7, polyorder=1, maxacceleration = 12):
         """
         Calcule pour chaque individu la valeur de vitesse et d'accélération à chaque instant du match.
         Inspiré de : https://github.com/Friends-of-Tracking-Data-FoTD/LaurieOnTracking/blob/master/Metrica_Velocities.py
@@ -47,8 +50,8 @@ class TeamTracking():
         if (self.df_tracking.groupby(['optaId', 'period']).gameClock.diff() >= self.frequence  + .0001).any() :
             raise ValueError(f"L'échantillonage n'est pas toujours égale à {int(1/f)} Hz.")
         
-        # Smoothing
-        if smoothing :
+        # Recalcule de la vitesse
+        if False :
             # Vecteur vitesse
             self.df_tracking.loc[:, 'vx'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
             self.df_tracking.loc[:, 'vy'] = self.df_tracking.groupby(['optaId', 'period']).x.diff() / self.frequence
@@ -62,9 +65,13 @@ class TeamTracking():
             self.df_tracking.drop(['vx', 'vy'], axis = 1)
         
         self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).speed.diff() / self.frequence
+        self.df_tracking.loc[self.df_tracking.acceleration > maxacceleration, 'acceleration'] = np.nan 
+        # Smoothing
+        if smoothing :
+            self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).acceleration.transform(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
         return self.df_tracking
     
-    def calculate_metabolic_cost(self):
+    def calculate_metabolic_cost(self, smoothing=False, window=7, polyorder=1):
         """
         Calcule pour chaque individu le coût métabolic de la vitesse et accélération à chaque instant du match.
         Inspiré de : https://soccermatics.readthedocs.io/en/latest/gallery/lesson8/plot_AccDecRatio.html
@@ -82,15 +89,57 @@ class TeamTracking():
         mask_negative_acc = self.df_tracking.acceleration < 0
         self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] = self.df_tracking.loc[mask_negative_acc, 'metabolic_cost'] * (-0.85 * self.df_tracking.loc[mask_negative_acc, 'acceleration'] + 3.6 * np.exp(1.33 * self.df_tracking.loc[mask_negative_acc, 'acceleration']))
         
+        # Smoothing
+        if smoothing :
+            self.df_tracking.loc[:, 'metabolic_cost'] = self.df_tracking.groupby(['optaId', 'period']).metabolic_cost.transform(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
+        
+        # Calcul de la puissance métabolique
+        self.df_tracking.loc[:, 'metabolic_power'] = self.df_tracking.metabolic_cost * self.df_tracking.speed
         return self.df_tracking
     
+class BallTracking():
+    def __init__(self, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame(), frequency=0.04):
+        self.frequence = frequency
+        if tracking_file_path : 
+            df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
+        elif not tracking_file_path and df_unstructured_tracking.empty :
+            raise ValueError("L'utilisateur doit fournir au minimum un lien vers un fichier de données .jsonl ou un dataframe de données déstructurées de SecondSpectrum.")
+        self.df_tracking = self.unstructured_data_to_structured_data(df_unstructured_tracking)
+        
+    def unstructured_data_to_structured_data(self, df_unstructured_tracking):
+        multi_ind = pd.MultiIndex.from_tuples([(row['period'], row['gameClock'])
+                                       for i, row in df_unstructured_tracking[['period', 'gameClock']].iterrows()],
+                                      names=["period", "gameClock"])
+        df_ball = pd.DataFrame(df_unstructured_tracking['ball'].to_list(),
+                       index=multi_ind).reset_index()
+        df_ball.loc[:, 'xyz'] = df_ball.apply(np.array)
+        df_ball.loc[:, 'x'] = df_ball['xyz'].apply(lambda x: x[0])
+        df_ball.loc[:, 'y'] = df_ball['xyz'].apply(lambda x: x[1])
+        df_ball.loc[:, 'z'] = df_ball['xyz'].apply(lambda x: x[2])
+            
+        return df_ball
+        
+
+    
 class MatchTracking():
-    def __init__(self, match_id = None):
+    def __init__(self, match_id=None, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame(), frequency=0.04):
         """"Objet représentant les données de tracking de SecondSpectrum pour un match donné."""
-        #TODO
-        self.HomeTracking = TeamTracking()
-        self.AwayTracking = TeamTracking()
-        self.BallTracking = None
+        
+        self.frequency = frequency
+        if tracking_file_path : 
+            df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
+        elif not tracking_file_path and df_unstructured_tracking.empty :
+            raise ValueError("L'utilisateur doit fournir au minimum un lien vers un fichier de données .jsonl ou un dataframe de données déstructurées de SecondSpectrum.")
+            
+        
+        self.HomeTracking = TeamTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04, 
+                                         isHomeTeam=True)
+        self.AwayTracking = TeamTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04, 
+                                         isHomeTeam=False)
+        self.BallTracking = BallTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04)
 
 
 
