@@ -94,6 +94,30 @@ class TeamTracking():
         self.df_tracking.loc[:, 'metabolic_power'] = self.df_tracking.metabolic_cost * self.df_tracking.speed
         return self.df_tracking
     
+class BallTracking():
+    def __init__(self, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame()):
+        self.frequence = 0.04
+        if tracking_file_path : 
+            df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
+        elif not tracking_file_path and df_unstructured_tracking.empty :
+            raise ValueError("L'utilisateur doit fournir au minimum un lien vers un fichier de données .jsonl ou un dataframe de données déstructurées de SecondSpectrum.")
+        self.df_tracking = self.unstructured_data_to_structured_data(df_unstructured_tracking)
+        
+    def unstructured_data_to_structured_data(self, df_unstructured_tracking):
+        multi_ind = pd.MultiIndex.from_tuples([(row['period'], row['gameClock'])
+                                       for i, row in df_unstructured_tracking[['period', 'gameClock']].iterrows()],
+                                      names=["period", "gameClock"])
+        df_ball = pd.DataFrame(df_unstructured_tracking['ball'].to_list(),
+                       index=multi_ind).reset_index()
+        df_ball.loc[:, 'xyz'] = df_ball.apply(np.array)
+        df_ball.loc[:, 'x'] = df_ball['xyz'].apply(lambda x: x[0])
+        df_ball.loc[:, 'y'] = df_ball['xyz'].apply(lambda x: x[1])
+        df_ball.loc[:, 'z'] = df_ball['xyz'].apply(lambda x: x[2])
+            
+        return df_ball
+        
+
+    
 class MatchTracking():
     def __init__(self, match_id = None):
         """"Objet représentant les données de tracking de SecondSpectrum pour un match donné."""
