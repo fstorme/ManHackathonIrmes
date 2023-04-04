@@ -5,10 +5,13 @@ import sys
 import os
 
 class TeamTracking():
-    def __init__(self, tracking_file_path = None, df_unstructured_tracking = pd.DataFrame(), isHomeTeam = True):
+    def __init__(self, tracking_file_path = None, 
+                 df_unstructured_tracking = pd.DataFrame(), 
+                 isHomeTeam = True, 
+                 frequency=0.04):
         """Objet représentant les données de tracking de SecondSpectrum pour une équipe donnée."""
         self.isHomeTeam = isHomeTeam
-        self.frequence = 0.04
+        self.frequence = frequency
 
         if tracking_file_path : 
             df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
@@ -95,8 +98,8 @@ class TeamTracking():
         return self.df_tracking
     
 class BallTracking():
-    def __init__(self, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame()):
-        self.frequence = 0.04
+    def __init__(self, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame(), frequency=0.04):
+        self.frequence = frequency
         if tracking_file_path : 
             df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
         elif not tracking_file_path and df_unstructured_tracking.empty :
@@ -119,12 +122,24 @@ class BallTracking():
 
     
 class MatchTracking():
-    def __init__(self, match_id = None):
+    def __init__(self, match_id=None, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame(), frequency=0.04):
         """"Objet représentant les données de tracking de SecondSpectrum pour un match donné."""
-        #TODO
-        self.HomeTracking = TeamTracking()
-        self.AwayTracking = TeamTracking()
-        self.BallTracking = None
+        
+        self.frequency = frequency
+        if tracking_file_path : 
+            df_unstructured_tracking = pd.read_json(tracking_file_path, lines = True)
+        elif not tracking_file_path and df_unstructured_tracking.empty :
+            raise ValueError("L'utilisateur doit fournir au minimum un lien vers un fichier de données .jsonl ou un dataframe de données déstructurées de SecondSpectrum.")
+            
+        
+        self.HomeTracking = TeamTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04, 
+                                         isHomeTeam=True)
+        self.AwayTracking = TeamTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04, 
+                                         isHomeTeam=False)
+        self.BallTracking = BallTracking(df_unstructured_tracking=df_unstructured_tracking, 
+                                         frequency=0.04)
 
 
 
