@@ -1,6 +1,7 @@
 import pandas as pd
 import scipy.signal as signal
 import numpy as np
+import json
 import sys
 import os
 
@@ -140,6 +141,12 @@ class MatchTracking():
                                          isHomeTeam=False)
         self.BallTracking = BallTracking(df_unstructured_tracking=df_unstructured_tracking, 
                                          frequency=0.04)
+        
+        f = open(tracking_file_path.replace('tracking-produced.jsonl','meta.json'))
+        data = json.load(f)
+
+        self.pitchWidth = data['pitchWidth']
+        self.pitchLength = data['pitchLength']
 
 
 
