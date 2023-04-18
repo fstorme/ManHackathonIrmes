@@ -27,7 +27,9 @@ class PassEvents():
                                         'pass.body_part.name', 'pass.outcome.name']]
         df['x'] = df['location'].apply(lambda x: x[0])
         df['y'] = df['location'].apply(lambda x: x[1])
-        df = df.drop(columns=['location'])
+        df['end_location_x'] = df['pass.end_location'].apply(lambda x: x[0])
+        df['end_location_y'] = df['pass.end_location'].apply(lambda x: x[1])
+        df = df.drop(columns=['location', 'pass.end_location'])
         # TODO : change with home or away, find a way to map it with the team's names
         df.loc[df['team.name'] == "Manchester City WFC", 'x'] = 120 - df.loc[
             df['team.name'] == "Manchester City WFC", 'x']
@@ -35,12 +37,19 @@ class PassEvents():
             df['team.name'] == "Manchester City WFC", 'y']
         df['x'] = 60 - df['x']
         df['y'] = df['y'] - 40
+        df.loc[df['team.name'] == "Manchester City WFC", 'end_location_x'] = 120 - df.loc[
+            df['team.name'] == "Manchester City WFC", 'end_location_x']
+        df.loc[df['team.name'] == "Manchester City WFC", 'end_location_y'] = 80 - df.loc[
+            df['team.name'] == "Manchester City WFC", 'end_location_y']
+        df['end_location_x'] = 60 - df['end_location_x']
+        df['end_location_y'] = df['end_location_y'] - 40
         df['gameClock'] = df['timestamp'].apply(timestamp_to_seconds)
         df['player.jersey_nb'] = df['player.name'].map(self._mapping_jersey)
         df['pass.recipient.jersey_nb'] = df['pass.recipient.name'].map(self._mapping_jersey)
         df = df[['period', 'gameClock', 'team.name',
-                 'duration', 'pass.end_location',
+                 'duration',
                  'x', 'y',
+                 'end_location_x', 'end_location_y',
                  'player.id', 'player.name',
                  'pass.recipient.id', 'pass.recipient.name',
                  'player.jersey_nb', 'pass.recipient.jersey_nb',
@@ -59,6 +68,17 @@ class PassEvents():
         self.df_pass_away = self.add_passer_and_recipient_location(self.df_pass_away,
                                                                    match_tracking.AwayTracking.df_tracking)
 
+    def update_dataset_with_position(self, match_tracking):
+        df_coord_home = self.merge_features(match_tracking.HomeTracking.df_tracking)
+        df_coord_away = self.merge_features(match_tracking.AwayTracking.df_tracking)
+        self.df_pass_home = pd.merge_asof(self.df_pass_home.sort_values(by = ['gameClock', 'period']),
+                                          df_coord_home.sort_values(by = ['gameClock', 'period']),
+                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'period'])
+
+        self.df_pass_away = pd.merge_asof(self.df_pass_away.sort_values(by = ['gameClock', 'period']),
+                                          df_coord_away.sort_values(by = ['gameClock', 'period']),
+                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'period'])
+
     def add_passer_and_recipient_location(self, df_pass, df_track):
         df_pass['player.jersey_nb'] = df_pass['player.jersey_nb'].astype('Int32')
         df_pass['pass.recipient.jersey_nb'] = df_pass['pass.recipient.jersey_nb'].astype('Int32')
@@ -75,8 +95,16 @@ class PassEvents():
         df_merge.loc[df_merge['period'] == 2, 'y'] *= -1
         df_merge['err'] = np.sqrt(
             (df_merge['x'] - df_merge['x_passer']) ** 2 + (df_merge['y'] - df_merge['y_passer']) ** 2)
-        df_merge = df_merge[df_merge['err'] < 15]
-        df_merge = df_merge[['period', 'gameClock', 'team.name', 'duration',
-                             'pass.outcome.name', 'x', 'y', 'x_passer', 'y_passer', 'x_recipient', 'y_recipient']]
+        #df_merge = df_merge[df_merge['err'] < 15]
+        #df_merge = df_merge[['period', 'gameClock', 'team.name', 'duration',
+        #                     'pass.outcome.name', 'x', 'y', 'x_passer', 'y_passer', 'x_recipient', 'y_recipient']]
         df_merge = df_merge.sort_values(['period', 'gameClock'])
         return df_merge
+
+
+    def merge_features(self, df_track):
+        df_track['coord'] = df_track[['x', 'y']].values.tolist()
+        df_coord = df_track.groupby(['period', 'gameClock']).apply(
+            lambda x: dict(zip(x.jersey_number, x.coord))).reset_index()
+        df_coord.rename(columns={0: "coord_all"}, inplace=True)
+        return df_coord
