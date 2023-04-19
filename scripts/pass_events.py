@@ -53,7 +53,8 @@ class PassEvents():
                  'player.id', 'player.name',
                  'pass.recipient.id', 'pass.recipient.name',
                  'player.jersey_nb', 'pass.recipient.jersey_nb',
-                 'pass.body_part.name', 'pass.outcome.name']]
+                 'pass.body_part.name', 'pass.height.name',
+                 'pass.outcome.name']]
         return df[df['team.name'] == "Manchester City WFC"], df[df['team.name'] != "Manchester City WFC"]
 
     def set_mapping_jersey(self, tracking_file_path):
@@ -108,3 +109,80 @@ class PassEvents():
             lambda x: dict(zip(x.jersey_number, x.coord))).reset_index()
         df_coord.rename(columns={0: "coord_all"}, inplace=True)
         return df_coord
+
+    def prepare_dataset_for_statsbomb_model(self):
+        coord_home = pd.DataFrame([*self.df_pass_home['coord_all']], self.df_pass_home.index).stack() \
+            .rename_axis([None, 'jersey_number_recipient']).reset_index(1, name='coord')
+        coord_away = pd.DataFrame([*self.df_pass_away['coord_all']], self.df_pass_away.index).stack() \
+            .rename_axis([None, 'jersey_number_recipient']).reset_index(1, name='coord')
+
+        split_df_home = self.df_pass_home[['gameClock', 'period']].join(coord_home).reset_index(drop=True)
+        split_df_away = self.df_pass_away[['gameClock', 'period']].join(coord_away).reset_index(drop=True)
+
+        df_coord_all_home = pd.DataFrame(split_df_home.coord.tolist(), columns=['x_recipient', 'y_recipient'],
+                                           index=split_df_home.index)
+        df_coord_all_away = pd.DataFrame(split_df_away.coord.tolist(), columns=['x_recipient', 'y_recipient'],
+                                         index=split_df_away.index)
+
+
+        df_final_v0_home = pd.concat([split_df_home[['gameClock', 'period', 'jersey_number_recipient']], df_coord_all_home],
+                             axis=1)
+        df_final_v0_away = pd.concat([split_df_away[['gameClock', 'period', 'jersey_number_recipient']], df_coord_all_home],
+                                     axis=1)
+        self.df_pass_home = self.df_pass_home[
+            self.df_pass_home.columns.difference(['jersey_number_recipient', 'x_recipient', 'y_recipient', 'coord_all'],
+                                     sort=False)].merge(df_final_v0_home, on=['gameClock', 'period'])
+
+        self.df_pass_away = self.df_pass_away[
+            self.df_pass_away.columns.difference(['jersey_number_recipient', 'x_recipient', 'y_recipient', 'coord_all'],
+                                                 sort=False)].merge(df_final_v0_away, on=['gameClock', 'period'])
+
+        # Step 1: remove pass events we don't want
+        modelling_df_home = self.df_pass_home.loc[
+            ~self.df_pass_home['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
+        ]
+        modelling_df_away = self.df_pass_away.loc[
+            ~self.df_pass_away['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
+        ]
+
+        # Step 2: create one hot variables
+        # pass height and body part
+        one_hot_pass_height_variables_home = pd.get_dummies(modelling_df_home['pass.height.name'])
+        one_hot_pass_height_variables_away = pd.get_dummies(modelling_df_away['pass.height.name'])
+
+        one_hot_body_part_variables_home = pd.get_dummies(modelling_df_home['pass.body_part.name'])
+        one_hot_body_part_variables_away = pd.get_dummies(modelling_df_away['pass.body_part.name'])
+
+        # tidies up naming before appending row wise
+        one_hot_pass_height_variables_home.columns = [
+            col.lower().replace(' ', '_') for col in one_hot_pass_height_variables_home.columns
+        ]
+
+        one_hot_pass_height_variables_away.columns = [
+            col.lower().replace(' ', '_') for col in one_hot_pass_height_variables_away.columns
+        ]
+
+        one_hot_body_part_variables_home.columns = [
+            col.lower().replace(' ', '_') for col in one_hot_body_part_variables_home.columns
+        ]
+
+        one_hot_body_part_variables_away.columns = [
+            col.lower().replace(' ', '_') for col in one_hot_body_part_variables_away.columns
+        ]
+        modelling_df_home = pd.concat([modelling_df_home, one_hot_pass_height_variables_home], axis=1)
+        modelling_df_away = pd.concat([modelling_df_away, one_hot_pass_height_variables_away], axis=1)
+
+
+        modelling_df_home = pd.concat([modelling_df_home, one_hot_body_part_variables_home], axis=1)
+        modelling_df_away = pd.concat([modelling_df_away, one_hot_body_part_variables_away], axis=1)
+
+
+        # Step 3: create binary pass complete column
+        modelling_df_home['completed'] = 0
+        modelling_df_away['completed'] = 0
+
+        modelling_df_home.loc[modelling_df_home['pass.outcome.name'].isna(), 'completed'] = 1
+        modelling_df_away.loc[modelling_df_away['pass.outcome.name'].isna(), 'completed'] = 1
+
+        self.df_pass_home = modelling_df_home
+        self.df_pass_away = modelling_df_away
