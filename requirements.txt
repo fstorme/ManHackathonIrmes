@@ -57,3 +57,4 @@ traitlets==5.9.0
 urllib3==1.26.15
 wcwidth==0.2.6
 widgetsnbextension==4.0.7
+plotly==5.14
