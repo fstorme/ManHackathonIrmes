@@ -16,6 +16,7 @@ def create_field():
             color=line_color,
             width=line_width,
         ),
+        layer='below'
         #fillcolor=filed_color,
     )
 
@@ -29,6 +30,7 @@ def create_field():
             color=line_color,
             width=line_width,
         ),
+        layer='below'
         #fillcolor=filed_color,
     )
 
@@ -43,6 +45,7 @@ def create_field():
             color=line_color,
             width=line_width,
         ),
+        layer='below'
         #fillcolor='rgba(255, 255, 255, 0.4)',
     )
 
@@ -56,6 +59,7 @@ def create_field():
             color=line_color,
             width=line_width,
         ),
+        layer='below'
         #fillcolor='rgba(255, 255, 255, 0.4)',
     )
 
@@ -70,6 +74,7 @@ def create_field():
             color=line_color,
             width=line_width,
         ),
+        layer='below'
         #fillcolor='rgba(255, 255, 255, 0.4)',
     )
 
