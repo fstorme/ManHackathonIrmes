@@ -33,7 +33,9 @@ class TeamTracking():
         df_tracking_home = df_tracking_home.explode(team + 'Players')
         # print(df_tracking_home[team + 'Players'].iloc[0])
         # Récupère les informations nécessaires dans les dictionnaires
-        df_tracking_home.loc[:, 'optaId'] = df_tracking_home[team + 'Players'].apply(lambda x: x['optaId']).astype(int)
+        df_tracking_home.loc[:, 'optaId'] = df_tracking_home[team + 'Players'].apply(lambda x: x['optaId'])#.astype(int)
+        df_tracking_home['optaId'] = df_tracking_home['optaId'].fillna('1')
+        df_tracking_home['optaId'] = df_tracking_home['optaId'].astype(int)
         df_tracking_home.loc[:, 'jersey_number'] = df_tracking_home[team + 'Players'].apply(
             lambda x: x['number']).astype(int)
         df_tracking_home.loc[:, 'speed'] = df_tracking_home[team + 'Players'].apply(lambda x: x['speed'])

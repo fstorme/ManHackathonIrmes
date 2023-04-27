@@ -12,7 +12,7 @@ class BallVisualization():
         self.pitchLength = match_tracking.pitchLength
         self.pitchWidth = match_tracking.pitchWidth
         self.df_merged = self.merge_sources(period)
-
+        self._df_merged = self.df_merged.copy()
 
     def merge_sources(self, period):
         df_pass = self.pass_events.df_pass.copy()
@@ -32,6 +32,13 @@ class BallVisualization():
         df_viz['color'] = df_viz['type'].map({'ball' : '#000000', 'pass' : '#FFB600', 'reception' : '#010101'})
 
         return df_viz
+    
+    def reset_lag(self):
+        self.df_merged = self._df_merged.copy()
+    
+    def lag_pass(self, lag):
+        self.df_merged.loc[self.df_merged['type']=='pass','gameClock'] +=0.1
+        self.df_merged = self.df_merged.sort_values('gameClock')
 
     def plot(self, start, end, plot_step):
         # Create figure
