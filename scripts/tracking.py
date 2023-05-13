@@ -69,7 +69,7 @@ class TeamTracking():
         # Smoothing
         if smoothing :
             self.df_tracking.loc[:, 'acceleration'] = self.df_tracking.groupby(['optaId', 'period']).acceleration.transform(lambda x : signal.savgol_filter(x, window_length=window,polyorder=polyorder))
-        return self.df_tracking
+        return self
     
     def calculate_metabolic_cost(self, smoothing=False, window=7, polyorder=1):
         """
@@ -95,7 +95,7 @@ class TeamTracking():
         
         # Calcul de la puissance métabolique
         self.df_tracking.loc[:, 'metabolic_power'] = self.df_tracking.metabolic_cost * self.df_tracking.speed
-        return self.df_tracking
+        return self
     
 class BallTracking():
     def __init__(self, tracking_file_path=None, df_unstructured_tracking=pd.DataFrame(), frequency=0.04):
