@@ -15,7 +15,7 @@ from .utils import nearest_defender_pass_line
 class PassEvents():
     def __init__(self, event_file):
         """Objet représentant les données de tracking de SecondSpectrum pour une équipe donnée."""
-        data_directory = r'..\data\statsbomb'
+        data_directory = '../data/statsbomb'
         file = f'{event_file}_events.json'
         events_path = os.path.join(data_directory, file)
         f = open(events_path)
@@ -87,7 +87,7 @@ class PassEvents():
         df_merge = df_merge[df_merge['err'] < 15]
         df_merge = df_merge.drop(columns=['err'])
         df_merge = df_merge[['period', 'gameClock', 'team.name', 'duration',
-                            'pass.outcome.name', 'x', 'y', 'x_passer', 'y_passer', 'x_recipient', 'y_recipient']]
+                            'pass.outcome.name', 'x', 'y', 'x_passer', 'y_passer', 'x_recipient', 'y_recipient', 'player.jersey_nb', 'pass.recipient.jersey_nb']]
         df_merge = df_merge.sort_values(['period', 'gameClock'])
         return df_merge
     
@@ -115,3 +115,122 @@ class PassEvents():
         self.df_pass_away = pd.merge_asof(self.df_pass_away.sort_values(by = ['gameClock', 'period']),
                                           df_coord_home.sort_values(by = ['gameClock', 'period']),
                                           on = "gameClock", by = "period", direction = 'nearest', suffixes = ('_team','_adversary')).sort_values(by = [ 'period'])
+        
+    
+    # Ajout approximatif Nathan 
+    def get_pitch_dimensions(self, match_tracking):
+        self.pitchLength = match_tracking.pitchLength
+        self.pitchWidth = match_tracking.pitchWidth
+
+    def clean_dataset(self):
+        # Step 1: remove pass events we don't want
+        modelling_df_home = self.df_pass_home.loc[
+            ~self.df_pass_home['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
+        ]
+        modelling_df_away = self.df_pass_away.loc[
+            ~self.df_pass_away['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
+        ]
+
+        #Step 3: 
+        modelling_df_home.loc[:,'completed'] = 0
+        modelling_df_away.loc[:,'completed'] = 0
+
+        modelling_df_home.loc[modelling_df_home['pass.outcome.name'].isna(), 'completed'] = 1
+        modelling_df_away.loc[modelling_df_away['pass.outcome.name'].isna(), 'completed'] = 1
+
+        #Remove when no recipient info
+        modelling_df_home = modelling_df_home.loc[~modelling_df_home['x_recipient'].isna()]
+        modelling_df_away = modelling_df_away.loc[~modelling_df_away['x_recipient'].isna()]
+
+        self.df_pass_home = modelling_df_home
+        self.df_pass_away = modelling_df_away
+
+    def set_df_for_model(self):
+        self._df_concat_raw = pd.concat([self.df_pass_home, self.df_pass_away])
+        self.df_model  = self._df_concat_raw[[
+            'period', 
+            'gameClock',
+            'team.name', 
+            'x_passer',
+            'y_passer',
+            'x_recipient',
+            'y_recipient',
+            'player.jersey_nb',
+            'pass.recipient.jersey_nb',
+            'coord_all_team', 
+            'coord_all_adversary',
+            'completed'
+        ]].copy()
+        #self.flip_coordinates()
+        self.compute_distance_sideline()
+        self.compute_distance_goal()
+        self.compute_distance_opponent()
+        self.speed_passer()
+        self.compute_opponents_closer_to_goal()
+        self.compute_distance_receiver_sideline()
+        self.compute_distance_receiver_goal()
+        self.compute_distance_receiver_opponent()
+        self.compute_opponents_closer_to_goal_receiver()
+        self.compute_speed_receiver()
+        self.compute_bypassed_opponents()
+        self.compute_angle()
+        self.compute_opponents_in_path()
+        self.compute_nearest_defender_pass_line()
+        self.compute_distance_pass()
+
+    def compute_distance_sideline(self):
+        self.df_model['dist_x'] = self.pitchLength/2 - self.df_model['x_passer'].abs()
+        self.df_model['dist_y'] = self.pitchWidth/2 - self.df_model['y_passer'].abs()
+        self.df_model['distance_sideline'] = self.df_model[['dist_x','dist_y']].min(axis = 1)
+        self.df_model = self.df_model[self.df_model['distance_sideline']>=0] #Pour enlever les touches ?
+        self.df_model = self.df_model.drop(columns = ['dist_x','dist_y'])
+
+    def compute_distance_goal(self):
+        self.df_model['distance_goal'] = np.sqrt((self.pitchLength/2 - self.df_model['x_passer'])**2 + self.df_model['y_passer']**2)
+
+    def compute_distance_opponent(self):
+        self.df_model['distance_opponent'] = self.df_model.apply(lambda row: np.min([np.sqrt((row['x_passer']-values[0])**2+(row['y_passer']-values[1])**2) for _, values in row['coord_all_adversary'].items()]), axis = 1)
+
+    def speed_passer(self):
+        self.df_model['speed_passer'] = self.df_model.apply(lambda row: row['coord_all_team'][row['player.jersey_nb']][2], axis = 1)
+
+    def compute_opponents_closer_to_goal(self):
+        self.df_model['opponents_closer_to_goal'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_goal'], self.pitchLength), axis = 1)
+
+    def compute_distance_receiver_sideline(self):
+        self.df_model['dist_x'] = self.pitchLength/2 - self.df_model['x_recipient'].abs()
+        self.df_model['dist_y'] = self.pitchWidth/2 - self.df_model['y_recipient'].abs()
+        self.df_model['distance_receiver_sideline'] = self.df_model[['dist_x','dist_y']].min(axis = 1)
+        self.df_model = self.df_model[self.df_model['distance_sideline']>=0] #Pour enlever les touches ?
+        self.df_model = self.df_model.drop(columns = ['dist_x','dist_y'])
+
+    def compute_distance_receiver_goal(self):
+        self.df_model['distance_receiver_goal'] = np.sqrt((self.pitchLength/2 - self.df_model['x_recipient'])**2 + self.df_model['y_recipient']**2)
+
+    def compute_distance_receiver_opponent(self):
+        self.df_model['distance_receiver_opponent'] = self.df_model.apply(lambda row: np.min([np.sqrt((row['x_recipient']-values[0])**2+(row['y_recipient']-values[1])**2) for _, values in row['coord_all_adversary'].items()]), axis = 1)
+        
+    def compute_opponents_closer_to_goal_receiver(self):
+        self.df_model['opponents_closer_to_goal_receiver'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_receiver_goal'], self.pitchLength), axis = 1)
+
+    def compute_speed_receiver(self):
+        self.df_model['speed_receiver'] = self.df_model.apply(lambda row: row['coord_all_team'][row['pass.recipient.jersey_nb']][2], axis = 1)
+
+    def compute_bypassed_opponents(self):
+        self.df_model['bypassed_opponents'] = self.df_model.apply(lambda row: bypassed_opponents(row['coord_all_adversary'],row['x_passer'],row['x_recipient']), axis = 1)
+
+    def compute_angle(self):
+        self.df_model['angle'] = self.df_model.apply(lambda row: angle(row['x_passer'],row['y_passer'],row['x_recipient'],row['y_recipient']), axis = 1)
+
+    def compute_opponents_in_path(self):
+        self.df_model['opponents_in_path'] = self.df_model.apply(lambda row: opponents_in_path(row['x_passer'],row['y_passer'],row['x_recipient'],row['y_recipient'],row['coord_all_adversary']), axis = 1)
+
+    def compute_nearest_defender_pass_line(self):
+        self.df_model['nearest_defender_pass_line'] = self.df_model.apply(lambda row: nearest_defender_pass_line(row['x_passer'],row['y_passer'],row['x_recipient'],row['y_recipient'],row['coord_all_adversary']), axis=1)
+
+    def compute_distance_pass(self):
+        self.df_model['distance_pass'] = self.df_model.apply(lambda row: np.sqrt((row['x_recipient']-row['x_passer'])**2 + (row['y_recipient']-row['y_passer'])**2), axis = 1)
+
+    def delete_columns(self):
+        self.df_model = self.df_model.drop(columns = ['team.name','player.jersey_nb', 'pass.recipient.jersey_nb', 'coord_all_team', 'coord_all_adversary'])
+        self.df_model = self.df_model[[c for c in self.df_model if c not in ['completed']] + ['completed']]

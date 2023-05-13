@@ -81,7 +81,7 @@ class BallTracking():
 class MatchTracking():
     def __init__(self, tracking_file, event_file):
         """"Objet représentant les données de tracking de SecondSpectrum pour un match donné."""
-        tracking_directory = r'..\data\tracking'
+        tracking_directory = '../data/tracking'
         tracking_file = f'{tracking_file}_SecondSpectrum_tracking-produced.jsonl'
         self.match_tracking_path = os.path.join(tracking_directory, tracking_file)
     
@@ -115,7 +115,7 @@ class MatchTracking():
 
         # Idée : utiliser la position moyenne de la gardienne pour savoir dans quel sens l'équipe attaque
         # Pour cela on a besoin du numéro de maillot de la gardienne
-        data_directory = r'..\data\statsbomb'
+        data_directory = '../data/statsbomb'
         file = f'{event_file}_lineups.json'
         lineups_path = os.path.join(data_directory, file)
         f = open(lineups_path)
