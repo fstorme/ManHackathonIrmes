@@ -122,6 +122,21 @@ class PassEvents():
         self.pitchLength = match_tracking.pitchLength
         self.pitchWidth = match_tracking.pitchWidth
 
+    def flip_coordinates(self):
+        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'x_passer'] *= (-1)
+        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'y_passer'] *= (-1)
+        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_team'] = \
+            self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_team'].apply(flip_coord_team)
+        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_adversary'] = \
+            self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_adversary'].apply(flip_coord_team)
+
+        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'x_passer'] *= (-1)
+        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'y_passer'] *= (-1)
+        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_team'] = \
+            self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_team'].apply(flip_coord_team)
+        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_adversary'] = \
+            self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_adversary'].apply(flip_coord_team)
+        
     def clean_dataset(self):
         # Step 1: remove pass events we don't want
         modelling_df_home = self.df_pass_home.loc[
@@ -161,7 +176,7 @@ class PassEvents():
             'coord_all_adversary',
             'completed'
         ]].copy()
-        #self.flip_coordinates()
+        self.flip_coordinates()
         self.compute_distance_sideline()
         self.compute_distance_goal()
         self.compute_distance_opponent()

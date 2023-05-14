@@ -87,3 +87,48 @@ def create_field():
     # Création de la figure et affichage
     fig = go.Figure(layout=layout)
     return fig
+
+
+def plot_Over_xPass(player):
+    color = 'red' if player.perf < 0 else 'green'
+    fig = go.Figure(data=[
+        go.Bar(
+            x=[player.perf], 
+            y=[0],
+            orientation='h',
+            marker=dict(
+                color='rgba(235, 254, 83, 1)'
+                ),
+        )
+    ])
+
+    fig.add_shape(type="rect",
+        x0=-2, y0=0.42, x1=2, y1=-0.42,
+        line=dict(color='rgba(105, 207, 249, 1)'),
+        # fillcolor = 'rgba(105, 207, 249, 1)',
+        layer = 'below'
+    )
+
+    fig.add_shape(type="line",
+        xref="x", yref="y",
+        x0=0, y0=0.5, x1=0, y1=-0.5,
+        line=dict(
+            color="white",
+            width=3,
+        ),
+    )
+
+    fig.update_layout(
+        showlegend=False,
+        autosize=True,
+        margin=dict(l=20, r=20, t=20, b=20),
+        width=500,
+        height=100,
+        plot_bgcolor = 'rgba(31, 29, 43, 1)' ,
+        paper_bgcolor = 'rgba(31, 29, 43, 1)' 
+        )
+
+    fig.update_xaxes(showgrid=False, zeroline = False, visible = False)
+    fig.update_yaxes(showgrid=False, zeroline = False, visible = False)
+
+    return fig
