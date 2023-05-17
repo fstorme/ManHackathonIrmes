@@ -11,6 +11,7 @@ from .utils import bypassed_opponents
 from .utils import angle
 from .utils import opponents_in_path
 from .utils import nearest_defender_pass_line
+from .utils import flip_dictionnary
 
 class PassEvents():
     def __init__(self, event_file):
@@ -74,14 +75,14 @@ class PassEvents():
         df_pass['player.jersey_nb'] = df_pass['player.jersey_nb'].astype('Int32')
         df_pass['pass.recipient.jersey_nb'] = df_pass['pass.recipient.jersey_nb'].astype('Int32')
         df_track['jersey_number'] = df_track['jersey_number'].astype('Int32')
-        df_merge = pd.merge_asof(df_pass.sort_values('gameClock'),
+        df_merge = pd.merge_asof(df_pass.sort_values(by = ['gameClock']),
                                  df_track[['gameClock', 'period', 'jersey_number', 'x', 'y']].sort_values('gameClock'),
                                  on='gameClock', left_by=['period', 'player.jersey_nb'],
-                                 right_by=['period', 'jersey_number'], suffixes=['', '_passer'])
-        df_merge = pd.merge_asof(df_merge.sort_values('gameClock'),
+                                 right_by=['period', 'jersey_number'], suffixes=['', '_passer'], direction= 'nearest')
+        df_merge = pd.merge_asof(df_merge.sort_values(by = ['gameClock']),
                                  df_track[['gameClock', 'period', 'jersey_number', 'x', 'y']].sort_values('gameClock'),
                                  on='gameClock', left_by=['period', 'pass.recipient.jersey_nb'],
-                                 right_by=['period', 'jersey_number'], suffixes=['', '_recipient'])
+                                 right_by=['period', 'jersey_number'], suffixes=['', '_recipient'], direction= 'nearest')
         df_merge['err'] = np.sqrt(
             (df_merge['x'] - df_merge['x_passer']) ** 2 + (df_merge['y'] - df_merge['y_passer']) ** 2)
         df_merge = df_merge[df_merge['err'] < 15]
@@ -102,49 +103,35 @@ class PassEvents():
         df_coord_home = self.merge_features(match_tracking.HomeTracking.df_tracking)
         df_coord_away = self.merge_features(match_tracking.AwayTracking.df_tracking)
         #home
-        self.df_pass_home = pd.merge_asof(self.df_pass_home.sort_values(by = ['gameClock', 'period']),
+        self.df_pass_home = pd.merge_asof(self.df_pass_home.sort_values(by = ['gameClock']),
                                           df_coord_home.sort_values(by = ['gameClock', 'period']),
-                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'period'])
-        self.df_pass_home = pd.merge_asof(self.df_pass_home.sort_values(by = ['gameClock', 'period']),
+                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'gameClock'])
+        self.df_pass_home = pd.merge_asof(self.df_pass_home.sort_values(by = ['gameClock']),
                                           df_coord_away.sort_values(by = ['gameClock', 'period']),
-                                          on = "gameClock", by = "period", direction = 'nearest', suffixes = ('_team','_adversary')).sort_values(by = [ 'period'])
+                                          on = "gameClock", by = "period", direction = 'nearest', suffixes = ('_team','_adversary')).sort_values(by = [ 'gameClock'])
 
         self.df_pass_away = pd.merge_asof(self.df_pass_away.sort_values(by = ['gameClock', 'period']),
                                           df_coord_away.sort_values(by = ['gameClock', 'period']),
-                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'period'])
+                                          on = "gameClock", by = "period", direction = 'nearest').sort_values(by = [ 'gameClock'])
         self.df_pass_away = pd.merge_asof(self.df_pass_away.sort_values(by = ['gameClock', 'period']),
                                           df_coord_home.sort_values(by = ['gameClock', 'period']),
-                                          on = "gameClock", by = "period", direction = 'nearest', suffixes = ('_team','_adversary')).sort_values(by = [ 'period'])
+                                          on = "gameClock", by = "period", direction = 'nearest', suffixes = ('_team','_adversary')).sort_values(by = [ 'gameClock'])
+        
+    def flip_coord_adversary(self):
+        self.df_pass_home['coord_all_adversary'] = self.df_pass_home['coord_all_adversary'].apply(flip_dictionnary)
+        self.df_pass_away['coord_all_adversary'] = self.df_pass_away['coord_all_adversary'].apply(flip_dictionnary)
         
     
     # Ajout approximatif Nathan 
-    def get_pitch_dimensions(self, match_tracking):
-        self.pitchLength = match_tracking.pitchLength
-        self.pitchWidth = match_tracking.pitchWidth
-
-    def flip_coordinates(self):
-        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'x_passer'] *= (-1)
-        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'y_passer'] *= (-1)
-        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_team'] = \
-            self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_team'].apply(flip_coord_team)
-        self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_adversary'] = \
-            self.df_model.loc[(self.df_model['team.name']=='Manchester City WFC') & (self.df_model['period']==2),'coord_all_adversary'].apply(flip_coord_team)
-
-        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'x_passer'] *= (-1)
-        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'y_passer'] *= (-1)
-        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_team'] = \
-            self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_team'].apply(flip_coord_team)
-        self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_adversary'] = \
-            self.df_model.loc[(self.df_model['team.name']!='Manchester City WFC') & (self.df_model['period']==1),'coord_all_adversary'].apply(flip_coord_team)
         
     def clean_dataset(self):
         # Step 1: remove pass events we don't want
         modelling_df_home = self.df_pass_home.loc[
             ~self.df_pass_home['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
-        ]
+        ].copy()
         modelling_df_away = self.df_pass_away.loc[
             ~self.df_pass_away['pass.outcome.name'].isin(['Injury Clearance', 'Pass Offside', 'Unknown'])
-        ]
+        ].copy()
 
         #Step 3: 
         modelling_df_home.loc[:,'completed'] = 0
@@ -176,7 +163,6 @@ class PassEvents():
             'coord_all_adversary',
             'completed'
         ]].copy()
-        self.flip_coordinates()
         self.compute_distance_sideline()
         self.compute_distance_goal()
         self.compute_distance_opponent()
@@ -194,14 +180,14 @@ class PassEvents():
         self.compute_distance_pass()
 
     def compute_distance_sideline(self):
-        self.df_model['dist_x'] = self.pitchLength/2 - self.df_model['x_passer'].abs()
-        self.df_model['dist_y'] = self.pitchWidth/2 - self.df_model['y_passer'].abs()
+        self.df_model['dist_x'] = 60 - self.df_model['x_passer'].abs()
+        self.df_model['dist_y'] = 40 - self.df_model['y_passer'].abs()
         self.df_model['distance_sideline'] = self.df_model[['dist_x','dist_y']].min(axis = 1)
         self.df_model = self.df_model[self.df_model['distance_sideline']>=0] #Pour enlever les touches ?
         self.df_model = self.df_model.drop(columns = ['dist_x','dist_y'])
 
     def compute_distance_goal(self):
-        self.df_model['distance_goal'] = np.sqrt((self.pitchLength/2 - self.df_model['x_passer'])**2 + self.df_model['y_passer']**2)
+        self.df_model['distance_goal'] = np.sqrt((60 - self.df_model['x_passer'])**2 + self.df_model['y_passer']**2)
 
     def compute_distance_opponent(self):
         self.df_model['distance_opponent'] = self.df_model.apply(lambda row: np.min([np.sqrt((row['x_passer']-values[0])**2+(row['y_passer']-values[1])**2) for _, values in row['coord_all_adversary'].items()]), axis = 1)
@@ -210,23 +196,23 @@ class PassEvents():
         self.df_model['speed_passer'] = self.df_model.apply(lambda row: row['coord_all_team'][row['player.jersey_nb']][2], axis = 1)
 
     def compute_opponents_closer_to_goal(self):
-        self.df_model['opponents_closer_to_goal'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_goal'], self.pitchLength), axis = 1)
+        self.df_model['opponents_closer_to_goal'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_goal']), axis = 1)
 
     def compute_distance_receiver_sideline(self):
-        self.df_model['dist_x'] = self.pitchLength/2 - self.df_model['x_recipient'].abs()
-        self.df_model['dist_y'] = self.pitchWidth/2 - self.df_model['y_recipient'].abs()
+        self.df_model['dist_x'] = 60 - self.df_model['x_recipient'].abs()
+        self.df_model['dist_y'] = 40 - self.df_model['y_recipient'].abs()
         self.df_model['distance_receiver_sideline'] = self.df_model[['dist_x','dist_y']].min(axis = 1)
         self.df_model = self.df_model[self.df_model['distance_sideline']>=0] #Pour enlever les touches ?
         self.df_model = self.df_model.drop(columns = ['dist_x','dist_y'])
 
     def compute_distance_receiver_goal(self):
-        self.df_model['distance_receiver_goal'] = np.sqrt((self.pitchLength/2 - self.df_model['x_recipient'])**2 + self.df_model['y_recipient']**2)
+        self.df_model['distance_receiver_goal'] = np.sqrt((60 - self.df_model['x_recipient'])**2 + self.df_model['y_recipient']**2)
 
     def compute_distance_receiver_opponent(self):
         self.df_model['distance_receiver_opponent'] = self.df_model.apply(lambda row: np.min([np.sqrt((row['x_recipient']-values[0])**2+(row['y_recipient']-values[1])**2) for _, values in row['coord_all_adversary'].items()]), axis = 1)
         
     def compute_opponents_closer_to_goal_receiver(self):
-        self.df_model['opponents_closer_to_goal_receiver'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_receiver_goal'], self.pitchLength), axis = 1)
+        self.df_model['opponents_closer_to_goal_receiver'] = self.df_model.apply(lambda row : count_adversary_closer_to_goal(row['coord_all_adversary'], row['distance_receiver_goal']), axis = 1)
 
     def compute_speed_receiver(self):
         self.df_model['speed_receiver'] = self.df_model.apply(lambda row: row['coord_all_team'][row['pass.recipient.jersey_nb']][2], axis = 1)

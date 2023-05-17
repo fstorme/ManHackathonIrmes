@@ -3,6 +3,7 @@ import scipy.signal as signal
 import numpy as np
 import json
 import os
+from copy import deepcopy
 
 
 class TeamTracking():
@@ -74,8 +75,19 @@ class BallTracking():
         df_ball.loc[:, 'x'] = df_ball['xyz'].apply(lambda x: x[0])
         df_ball.loc[:, 'y'] = df_ball['xyz'].apply(lambda x: x[1])
         df_ball.loc[:, 'z'] = df_ball['xyz'].apply(lambda x: x[2])
-
         return df_ball
+    
+    def flip(self, home_starts_right):
+        if home_starts_right:
+            self.df_tracking.loc[self.df_tracking['period']==2,'x'] *= -1
+            self.df_tracking.loc[self.df_tracking['period']==2,'y'] *= -1
+        else:
+            self.df_tracking.loc[self.df_tracking['period']==1,'x'] *= -1
+            self.df_tracking.loc[self.df_tracking['period']==1,'y'] *= -1
+
+    def rescale(self, pitchLength, pitchWidth):
+        self.df_tracking.loc[:,'x'] *= 120/pitchLength
+        self.df_tracking.loc[:,'y'] *= 80/pitchWidth
     
 
 class MatchTracking():
@@ -92,7 +104,8 @@ class MatchTracking():
                                          isHomeTeam=True)
         self.AwayTracking = TeamTracking(df_unstructured_tracking=df_unstructured_tracking,
                                          isHomeTeam=False)
-        self.BallTracking = BallTracking(df_unstructured_tracking=df_unstructured_tracking)
+        self.BallTrackingHome = BallTracking(df_unstructured_tracking=df_unstructured_tracking)
+        self.BallTrackingAway = deepcopy(self.BallTrackingHome)
         #On récupere les dimensions du terrain
         self.set_pitch_dimensions()
         #On détermine quelle équipe attaquait à droite en premier
@@ -103,6 +116,10 @@ class MatchTracking():
         self.AwayTracking.flip(home_starts_right = self.HomeStartstoRight)
         self.HomeTracking.rescale(pitchLength = self.pitchLength, pitchWidth = self.pitchWidth)
         self.AwayTracking.rescale(pitchLength = self.pitchLength, pitchWidth = self.pitchWidth)
+        self.BallTrackingHome.flip(home_starts_right = self.HomeStartstoRight)
+        self.BallTrackingAway.flip(home_starts_right = not self.HomeStartstoRight)
+        self.BallTrackingHome.rescale(pitchLength = self.pitchLength, pitchWidth = self.pitchWidth)
+        self.BallTrackingAway.rescale(pitchLength = self.pitchLength, pitchWidth = self.pitchWidth)
 
     def set_pitch_dimensions(self):
         f = open(self.match_tracking_path.replace('tracking-produced.jsonl', 'meta.json'))

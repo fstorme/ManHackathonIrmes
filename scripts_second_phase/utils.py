@@ -29,9 +29,9 @@ def y_stats_to_track(y, pitchWidth):
 def flip_coord_team(dict_num):
     return {key : [-values[0],-values[1],values[2]] for key, values in dict_num.items()}
 
-def count_adversary_closer_to_goal(dict_num, dist_goal, pitchLength):
+def count_adversary_closer_to_goal(dict_num, dist_goal):
     return sum(
-        np.sqrt((pitchLength / 2 - values[0]) ** 2 + values[1] ** 2)
+        np.sqrt((60 - values[0]) ** 2 + values[1] ** 2)
         < dist_goal
         for _, values in dict_num.items()
     )
@@ -78,4 +78,7 @@ def nearest_defender_pass_line(x_passer, y_passer, x_receiver, y_receiver, dict_
         dist = numerator/denumerator
         min_dist = min(min_dist,dist)
     return min_dist
+
+def flip_dictionnary(coord):
+    return {key: [-val[0], -val[1], val[2:]] for key, val in coord.items()}
         
